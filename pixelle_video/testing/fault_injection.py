@@ -19,6 +19,7 @@ Design notes
 
 from __future__ import annotations
 
+import asyncio
 import random
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -146,11 +147,15 @@ class FakeFrameProcessor:
         fail_on: Optional[Dict[int, List[Optional[str]]]] = None,
         segment_duration: float = 3.0,
         on_call: Optional[Callable[[int, int], None]] = None,
+        latency: Optional[Callable[[], float]] = None,
     ) -> None:
         self.profile = profile or FaultProfile(failure_rate=0.0)
         self.fail_on = {k: list(v) for k, v in (fail_on or {}).items()}
         self.segment_duration = segment_duration
         self.on_call = on_call
+        self.latency = latency  # seconds per call (simulated provider latency)
+        self.in_flight = 0
+        self.max_in_flight = 0
         self.ledger: List[ShotCall] = []
         self._attempts: Dict[tuple, int] = {}
         self._bad_input: Dict[str, bool] = {}
@@ -173,6 +178,14 @@ class FakeFrameProcessor:
 
         if self.on_call is not None:
             self.on_call(frame.index, attempt)
+
+        if self.latency is not None:
+            self.in_flight += 1
+            self.max_in_flight = max(self.max_in_flight, self.in_flight)
+            try:
+                await asyncio.sleep(self.latency())
+            finally:
+                self.in_flight -= 1
 
         kind, futile = self._decide(frame, attempt)
         self.ledger.append(

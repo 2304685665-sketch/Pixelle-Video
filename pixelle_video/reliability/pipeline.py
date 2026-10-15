@@ -9,6 +9,13 @@ Mechanisms (each can be switched off for ablation):
 * ``checkpoint``  – plan + per-shot state in SQLite; ``resume(task_id)`` only
                     regenerates shots that are not done
 * ``breaker``     – optional circuit breaker; while open, shots stay pending
+* ``concurrency`` – shots generated in parallel (bounded); with ``isolate=False``
+                    the first failure stops new shots from starting
+
+Finished segments are stored content-addressed (``<task>/cas/<fingerprint>``)
+and indexed in the checkpoint, so ``revise(task_id, narrations)`` after a script
+edit only regenerates shots whose inputs changed, even when shots are inserted
+or deleted.
 
 A run that ends with unfinished shots raises ``ShotsIncompleteError`` *after*
 committing all finished shots, so the caller can resume instead of rerunning.
@@ -18,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import random
+import shutil
 from pathlib import Path
 from typing import Awaitable, Callable, List, Optional
 
@@ -33,6 +41,7 @@ from pixelle_video.reliability.errors import (
     RetryPolicy,
     classify,
 )
+from pixelle_video.reliability.fingerprint import shot_fingerprint
 from pixelle_video.utils.os_util import get_output_path, get_task_final_video_path
 
 
@@ -61,8 +70,12 @@ class ReliablePipeline(StandardPipeline):
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         seed: int = 0,
         event_sink: Optional[Callable[[dict], None]] = None,
+        concurrency: int = 1,
     ):
         super().__init__(core)
+        if concurrency < 1:
+            raise ValueError("concurrency must be >= 1")
+        self.concurrency = concurrency
         self.isolate = isolate
         self.policy = policy or RetryPolicy()
         self.rewrite = rewrite
@@ -131,42 +144,113 @@ class ReliablePipeline(StandardPipeline):
         finally:
             self._resuming = False
 
+    async def revise(self, task_id: str, narrations: List[str], progress_callback=None):
+        """
+        Apply a script edit (new narration list) to a checkpointed task and
+        re-render. Shots whose fingerprint already has a cached segment are
+        reused; only new or changed shots are generated. Image prompts of
+        unchanged narrations are kept; prompts for changed ones are produced by
+        the normal ``plan_visuals`` step on just those narrations.
+        """
+        if not self.store:
+            raise RuntimeError("revise requires checkpoint=True")
+        plan = self.store.load_plan(task_id)
+        if plan is None:
+            raise KeyError(f"no checkpoint for task {task_id}")
+        if not narrations:
+            raise ValueError("narrations must not be empty")
+
+        known = dict(zip(plan["narrations"], plan["image_prompts"]))
+        changed = [n for n in dict.fromkeys(narrations) if n not in known]
+        if changed:
+            tmp = PipelineContext(input_text=plan["input_text"], params=plan["params"])
+            tmp.narrations = changed
+            await self.plan_visuals(tmp)
+            known.update(zip(changed, tmp.image_prompts))
+
+        plan = {**plan, "narrations": list(narrations), "image_prompts": [known[n] for n in narrations],
+                "revision": int(plan.get("revision", 0)) + 1}
+        self.store.replace_plan(task_id, plan, len(narrations))
+        self._emit(type="task", status="revised", revision=plan["revision"], shots=len(narrations),
+                   new_or_changed=len(changed))
+        return await self.resume(task_id, progress_callback=progress_callback)
+
     # ------------------------------------------------------------------ #
     # Shot execution
     # ------------------------------------------------------------------ #
 
     async def produce_assets(self, ctx: PipelineContext):
         storyboard, task_id = ctx.storyboard, ctx.task_id
-        done = self.store.shots(task_id) if self.store else {}
+        fps = [shot_fingerprint(f, ctx.config) for f in storyboard.frames]
+
+        to_run: List[int] = []
+        for i, frame in enumerate(storyboard.frames):
+            art = self.store.get_artifact(task_id, fps[i]) if self.store else None
+            if art and Path(art[0]).exists():
+                frame.video_segment_path, frame.duration = art
+                self.store.mark_done(task_id, i, art[0], art[1], fps[i])
+                self._emit(type="shot", shot=i, status="reused")
+            else:
+                to_run.append(i)
+
         failed: List[int] = []
         pending: List[int] = []
+        sem = asyncio.Semaphore(self.concurrency)
+        stop = False
+        aborted = False  # set when any shot raises; checked before starting a shot
 
-        for i, frame in enumerate(storyboard.frames):
-            rec = done.get(i)
-            if rec and rec.status == "done" and rec.segment_path and Path(rec.segment_path).exists():
-                frame.video_segment_path, frame.duration = rec.segment_path, rec.duration or 0.0
-                storyboard.total_duration += frame.duration
-                self._emit(type="shot", shot=i, status="reused")
-                continue
+        async def run(i: int) -> None:
+            nonlocal stop, aborted
+            async with sem:
+                if stop or aborted:
+                    pending.append(i)
+                    return
+                try:
+                    outcome = await self._run_shot(ctx, i, storyboard.frames[i], fps[i])
+                except BaseException:
+                    # The semaphore is released on the way out and a queued shot may be
+                    # scheduled before the caller gets to cancel it; the flag closes that race.
+                    aborted = True
+                    raise
+                if outcome == "failed":
+                    failed.append(i)
+                    stop = stop or not self.isolate
+                elif outcome == "pending":
+                    pending.append(i)
 
-            if failed and not self.isolate:
-                pending.append(i)
-                continue
-
-            outcome = await self._run_shot(ctx, i, frame)
-            if outcome == "done":
-                storyboard.total_duration += frame.duration
-            elif outcome == "failed":
-                failed.append(i)
-            else:
-                pending.append(i)
+        # Semaphore acquisition is FIFO, so concurrency=1 keeps the original shot order.
+        tasks = [asyncio.create_task(run(i)) for i in to_run]
+        try:
+            await asyncio.gather(*tasks)
+        except BaseException:
+            # Unexpected error / cancellation / process shutdown: stop sibling shots so no
+            # orphaned task keeps calling (and paying) the provider in the background.
+            for t in tasks:
+                t.cancel()
+            await asyncio.wait(tasks)
+            raise
+        storyboard.total_duration = sum(f.duration for f in storyboard.frames if f.video_segment_path)
 
         if failed or pending:
             if self.store:
                 self.store.set_task_status(task_id, "partial")
-            raise ShotsIncompleteError(task_id, failed, pending)
+            raise ShotsIncompleteError(task_id, sorted(failed), sorted(pending))
 
-    async def _run_shot(self, ctx: PipelineContext, i: int, frame) -> str:
+    def _store_content_addressed(self, ctx: PipelineContext, segment_path: str, fp: str) -> str:
+        """Copy a fresh segment to <task>/cas/<fingerprint><ext>.
+
+        Upstream names segments by shot index, so after an insertion a new shot
+        would overwrite an old shot's file; the content-addressed copy keeps
+        every cached segment valid regardless of index changes.
+        """
+        src = Path(segment_path)
+        dst = Path(ctx.task_dir or get_output_path(ctx.task_id)) / "cas" / f"{fp}{src.suffix}"
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if src.resolve() != dst.resolve():
+            shutil.copy2(src, dst)
+        return str(dst)
+
+    async def _run_shot(self, ctx: PipelineContext, i: int, frame, fp: Optional[str] = None) -> str:
         task_id, attempt = ctx.task_id, 0
         while True:
             attempt += 1
@@ -205,8 +289,12 @@ class ReliablePipeline(StandardPipeline):
                 self.breaker.record(None)
             ctx.storyboard.frames[i] = processed
             if self.store:
+                if fp:
+                    processed.video_segment_path = self._store_content_addressed(
+                        ctx, processed.video_segment_path, fp
+                    )
                 self.store.record_attempt(task_id, i, None, None)
-                self.store.mark_done(task_id, i, processed.video_segment_path, processed.duration)
+                self.store.mark_done(task_id, i, processed.video_segment_path, processed.duration, fp)
             self._emit(type="shot", shot=i, status="done", attempt=attempt)
             return "done"
 

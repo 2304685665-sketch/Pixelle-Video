@@ -1,0 +1,120 @@
+{
+ "args": {
+  "videos": 200,
+  "shots": 10,
+  "edits": 5,
+  "lat_videos": 100,
+  "lat_shots": 8,
+  "median_latency": 0.01,
+  "fail": [
+   0.1,
+   0.3
+  ]
+ },
+ "editing_session": {
+  "videos": 200,
+  "shots": 10,
+  "edits_per_video": 5,
+  "edit_calls_incremental": 1808,
+  "edit_calls_full_rerun": 10051,
+  "saving": 0.8201,
+  "per_op_mean_calls": {
+   "modify1": {
+    "incremental": 1.0,
+    "full_rerun": 9.98,
+    "n": 179
+   },
+   "modify2": {
+    "incremental": 2.0,
+    "full_rerun": 10.12,
+    "n": 159
+   },
+   "insert": {
+    "incremental": 1.0,
+    "full_rerun": 11.07,
+    "n": 168
+   },
+   "delete": {
+    "incremental": 0.0,
+    "full_rerun": 9.14,
+    "n": 155
+   },
+   "reorder": {
+    "incremental": 0.0,
+    "full_rerun": 9.91,
+    "n": 180
+   },
+   "speed": {
+    "incremental": 7.19,
+    "full_rerun": 10.03,
+    "n": 159
+   }
+  }
+ },
+ "latency": [
+  {
+   "fail": 0.1,
+   "concurrency": 1,
+   "isolate": true,
+   "completion": 0.95,
+   "p50_units": 17.44,
+   "p95_units": 21.89
+  },
+  {
+   "fail": 0.1,
+   "concurrency": 1,
+   "isolate": false,
+   "completion": 0.95,
+   "p50_units": 18.26,
+   "p95_units": 23.13
+  },
+  {
+   "fail": 0.1,
+   "concurrency": 4,
+   "isolate": true,
+   "completion": 0.95,
+   "p50_units": 8.07,
+   "p95_units": 10.33
+  },
+  {
+   "fail": 0.1,
+   "concurrency": 4,
+   "isolate": false,
+   "completion": 0.95,
+   "p50_units": 7.75,
+   "p95_units": 9.53
+  },
+  {
+   "fail": 0.3,
+   "concurrency": 1,
+   "isolate": true,
+   "completion": 0.88,
+   "p50_units": 21.76,
+   "p95_units": 30.91
+  },
+  {
+   "fail": 0.3,
+   "concurrency": 1,
+   "isolate": false,
+   "completion": 0.88,
+   "p50_units": 21.68,
+   "p95_units": 32.74
+  },
+  {
+   "fail": 0.3,
+   "concurrency": 4,
+   "isolate": true,
+   "completion": 0.86,
+   "p50_units": 9.11,
+   "p95_units": 17.16
+  },
+  {
+   "fail": 0.3,
+   "concurrency": 4,
+   "isolate": false,
+   "completion": 0.86,
+   "p50_units": 9.38,
+   "p95_units": 16.26
+  }
+ ]
+}
