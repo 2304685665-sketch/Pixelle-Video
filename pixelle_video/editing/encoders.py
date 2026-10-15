@@ -22,6 +22,29 @@ class Encoder(Protocol):
     name: str
     dim: int
 
+    # ``get_text_features`` / ``get_image_features`` changed their return type across
+    # transformers releases (tensor in 4.x, a ModelOutput in newer ones). Compute the
+    # projected embeddings explicitly, exactly as ChineseCLIPModel defines them, so the
+    # encoder does not depend on that API detail.
+    def _text_features(self, batch):
+        out = self.model.text_model(
+            input_ids=batch["input_ids"],
+            attention_mask=batch.get("attention_mask"),
+            token_type_ids=batch.get("token_type_ids"),
+        )
+        feats = self.model.text_projection(out[0][:, 0, :])  # [CLS] of last hidden state
+        return self._check(feats)
+
+    def _image_features(self, batch):
+        out = self.model.vision_model(pixel_values=batch["pixel_values"])
+        feats = self.model.visual_projection(out[1])  # pooled (post-layernorm CLS)
+        return self._check(feats)
+
+    def _check(self, feats):
+        if feats.shape[-1] != self.dim:
+            raise RuntimeError(f"unexpected embedding size {feats.shape[-1]} (expected {self.dim})")
+        return feats
+
     def encode_text(self, texts: Sequence[str]) -> np.ndarray: ...
 
     def encode_images(self, paths: Sequence[str | Path]) -> np.ndarray: ...
@@ -80,7 +103,7 @@ class ChineseClipEncoder:
                     text=list(texts[i : i + self.batch_size]),
                     padding=True, truncation=True, max_length=52, return_tensors="pt",
                 ).to(self.device)
-                out.append(self.model.get_text_features(**batch).float().cpu().numpy())
+                out.append(self._text_features(batch).float().cpu().numpy())
         return l2_normalise(np.concatenate(out)) if out else np.zeros((0, self.dim), np.float32)
 
     def encode_images(self, paths: Sequence[str | Path]) -> np.ndarray:
@@ -91,5 +114,5 @@ class ChineseClipEncoder:
             for i in range(0, len(paths), self.batch_size):
                 images = [Image.open(p).convert("RGB") for p in paths[i : i + self.batch_size]]
                 batch = self.processor(images=images, return_tensors="pt").to(self.device)
-                out.append(self.model.get_image_features(**batch).float().cpu().numpy())
+                out.append(self._image_features(batch).float().cpu().numpy())
         return l2_normalise(np.concatenate(out)) if out else np.zeros((0, self.dim), np.float32)
