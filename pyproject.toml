@@ -35,6 +35,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "fakeredis[lua]>=2.23",
+    "httpx>=0.28",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "ruff>=0.6.0",
@@ -45,6 +47,9 @@ editing = [
 editing-models = [
     "torch>=2.3",
     "transformers>=4.44",
+]
+serving = [
+    "redis>=5.0",
 ]
 
 [build-system]

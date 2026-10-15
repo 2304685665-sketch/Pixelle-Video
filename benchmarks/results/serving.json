@@ -1,0 +1,71 @@
+{
+ "args": {
+  "submits": 5000,
+  "keys": 500,
+  "clients": 50,
+  "tasks": 200,
+  "workers": 8,
+  "kill_prob": 0.03,
+  "rl_workers": 16,
+  "rl_calls": 15,
+  "rate": 20,
+  "capacity": 5
+ },
+ "idempotency": {
+  "submits": 5000,
+  "unique_keys": 500,
+  "clients": 50,
+  "atomic_tasks_created": 500,
+  "naive_tasks_created": 535,
+  "atomic_submits_per_s": 5895,
+  "naive_submits_per_s": 7068
+ },
+ "chaos": [
+  {
+   "checkpoint_resume": true,
+   "tasks": 200,
+   "workers": 8,
+   "kill_prob_per_call": 0.03,
+   "worker_kills": 35,
+   "statuses": {
+    "completed": 200
+   },
+   "paid_shot_calls": 1000,
+   "duplicate_successful_shots": 0,
+   "seconds": 7.7
+  },
+  {
+   "checkpoint_resume": false,
+   "tasks": 200,
+   "workers": 8,
+   "kill_prob_per_call": 0.03,
+   "worker_kills": 40,
+   "statuses": {
+    "completed": 200
+   },
+   "paid_shot_calls": 1078,
+   "duplicate_successful_shots": 78,
+   "seconds": 10.6
+  }
+ ],
+ "rate_limit": [
+  {
+   "limited": false,
+   "workers": 16,
+   "calls": 240,
+   "rate": 20,
+   "capacity": 5,
+   "peak_calls_in_any_1s": 240,
+   "mean_rate": 3021.5
+  },
+  {
+   "limited": true,
+   "workers": 16,
+   "calls": 240,
+   "rate": 20,
+   "capacity": 5,
+   "peak_calls_in_any_1s": 25,
+   "mean_rate": 20.4
+  }
+ ]
+}

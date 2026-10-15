@@ -60,6 +60,7 @@ class ReliablePipeline(StandardPipeline):
         store_path: Optional[str | Path] = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         seed: int = 0,
+        event_sink: Optional[Callable[[dict], None]] = None,
     ):
         super().__init__(core)
         self.isolate = isolate
@@ -74,6 +75,22 @@ class ReliablePipeline(StandardPipeline):
             if checkpoint else None
         )
         self._resuming = False
+        self.event_sink = event_sink
+
+    def _emit(self, **event) -> None:
+        if self.event_sink is not None:
+            self.event_sink(event)
+
+    async def setup_environment(self, ctx: PipelineContext):
+        """Honour an externally assigned ``task_id`` (e.g. from a job queue) so a
+        retried job maps onto the same checkpoint instead of a new task."""
+        task_id = ctx.params.get("task_id")
+        if not task_id:
+            return await super().setup_environment(ctx)
+        from pixelle_video.utils.os_util import create_task_output_dir
+
+        ctx.task_dir, ctx.task_id = create_task_output_dir(task_id)
+        ctx.final_video_path = get_task_final_video_path(task_id)
 
     # ------------------------------------------------------------------ #
     # Plan persistence: written before any paid shot call
@@ -129,6 +146,7 @@ class ReliablePipeline(StandardPipeline):
             if rec and rec.status == "done" and rec.segment_path and Path(rec.segment_path).exists():
                 frame.video_segment_path, frame.duration = rec.segment_path, rec.duration or 0.0
                 storyboard.total_duration += frame.duration
+                self._emit(type="shot", shot=i, status="reused")
                 continue
 
             if failed and not self.isolate:
@@ -161,6 +179,7 @@ class ReliablePipeline(StandardPipeline):
                 )
             except CircuitOpenError:
                 logger.warning(f"shot {i}: circuit open, left pending")
+                self._emit(type="shot", shot=i, status="pending", attempt=attempt, reason="circuit_open")
                 return "pending"
             except Exception as exc:  # noqa: BLE001 - classified below
                 cls = classify(exc)
@@ -172,7 +191,9 @@ class ReliablePipeline(StandardPipeline):
                     logger.warning(f"shot {i}: giving up after {attempt} attempt(s) [{cls.value}] {exc}")
                     if self.store:
                         self.store.mark_failed(task_id, i)
+                    self._emit(type="shot", shot=i, status="failed", attempt=attempt, error_class=cls.value)
                     return "failed"
+                self._emit(type="shot", shot=i, status="retrying", attempt=attempt, error_class=cls.value)
                 if cls is ErrorClass.CONTENT and self.rewrite is not None:
                     self.rewrite(frame)
                 delay = self.policy.backoff(cls, attempt, self._rng)
@@ -186,6 +207,7 @@ class ReliablePipeline(StandardPipeline):
             if self.store:
                 self.store.record_attempt(task_id, i, None, None)
                 self.store.mark_done(task_id, i, processed.video_segment_path, processed.duration)
+            self._emit(type="shot", shot=i, status="done", attempt=attempt)
             return "done"
 
     async def finalize(self, ctx: PipelineContext):
