@@ -222,3 +222,28 @@ def test_cli_caption_describe_and_llm_baseline(fake_index, tmp_path, monkeypatch
     data = json.loads(result.read_text())
     assert set(data["reports"]) == {"llm-asset", "visual", "bm25-caption", "visual+bm25-caption"}
     assert data["reports"]["visual+bm25-caption"]["hit_at"]["1"] >= data["reports"]["llm-asset"]["hit_at"]["1"]
+
+
+def test_chinese_clip_feature_path_without_torch():
+    """Guards the version-independent feature computation (no weights or torch needed)."""
+    from types import SimpleNamespace
+
+    from pixelle_video.editing.encoders import ChineseClipEncoder
+
+    enc = object.__new__(ChineseClipEncoder)
+    enc.dim = 4
+    hidden = np.arange(2 * 3 * 6, dtype=np.float32).reshape(2, 3, 6)   # batch, tokens, hidden
+    pooled = np.ones((2, 6), dtype=np.float32)
+    proj = np.ones((6, 4), dtype=np.float32)
+    enc.model = SimpleNamespace(
+        text_model=lambda **kw: (hidden,),
+        vision_model=lambda **kw: (None, pooled),
+        text_projection=lambda x: x @ proj,
+        visual_projection=lambda x: x @ proj,
+    )
+    t = enc._text_features({"input_ids": None})
+    assert t.shape == (2, 4) and np.allclose(t[0], hidden[0, 0].sum())  # uses the [CLS] token
+    assert enc._image_features({"pixel_values": None}).shape == (2, 4)
+    enc.dim = 5
+    with pytest.raises(RuntimeError):
+        enc._image_features({"pixel_values": None})
