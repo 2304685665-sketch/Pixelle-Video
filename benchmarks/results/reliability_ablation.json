@@ -1,0 +1,224 @@
+{
+ "crash_trials": {
+  "trials": 200,
+  "full_dup": 0,
+  "upstream_dup": 401,
+  "full_recovered": 200,
+  "upstream_recovered": 200
+ },
+ "args": {
+  "videos": 500,
+  "shots": 5,
+  "fail": [
+   0.1,
+   0.3
+  ],
+  "runs": 3,
+  "rewrite_fix": 0.7,
+  "bad_input": 0.02,
+  "crash_trials": 200
+ },
+ "fault_mix": {
+  "timeout": 0.4,
+  "rate_limit": 0.3,
+  "moderation": 0.15,
+  "corrupt": 0.15
+ },
+ "note": "simulated faults; replace fault_mix with measured provider distribution before citing",
+ "rows": [
+  {
+   "strategy": "S0 upstream (single run)",
+   "fail": 0.1,
+   "videos": 500,
+   "completion_rate": 0.548,
+   "calls_per_finished_video": 7.204,
+   "duplicate_success_calls_per_video": 0.0,
+   "futile_calls_per_video": 0.09,
+   "mean_runs_per_finished_video": 1.0
+  },
+  {
+   "strategy": "H1 upstream + whole-video rerun",
+   "fail": 0.1,
+   "videos": 500,
+   "completion_rate": 0.772,
+   "calls_per_finished_video": 8.303,
+   "duplicate_success_calls_per_video": 1.116,
+   "futile_calls_per_video": 0.402,
+   "mean_runs_per_finished_video": 1.347
+  },
+  {
+   "strategy": "H2 + uniform shot retry x3",
+   "fail": 0.1,
+   "videos": 500,
+   "completion_rate": 0.818,
+   "calls_per_finished_video": 9.425,
+   "duplicate_success_calls_per_video": 0.666,
+   "futile_calls_per_video": 2.088,
+   "mean_runs_per_finished_video": 1.0
+  },
+  {
+   "strategy": "FULL",
+   "fail": 0.1,
+   "videos": 500,
+   "completion_rate": 0.868,
+   "calls_per_finished_video": 6.714,
+   "duplicate_success_calls_per_video": 0.0,
+   "futile_calls_per_video": 0.43,
+   "mean_runs_per_finished_video": 1.005
+  },
+  {
+   "strategy": "FULL - error classes (uniform x3)",
+   "fail": 0.1,
+   "videos": 500,
+   "completion_rate": 0.896,
+   "calls_per_finished_video": 7.458,
+   "duplicate_success_calls_per_video": 0.0,
+   "futile_calls_per_video": 1.248,
+   "mean_runs_per_finished_video": 1.0
+  },
+  {
+   "strategy": "FULL - prompt rewrite",
+   "fail": 0.1,
+   "videos": 500,
+   "completion_rate": 0.818,
+   "calls_per_finished_video": 7.418,
+   "duplicate_success_calls_per_video": 0.0,
+   "futile_calls_per_video": 0.754,
+   "mean_runs_per_finished_video": 1.002
+  },
+  {
+   "strategy": "FULL - checkpoint/resume",
+   "fail": 0.1,
+   "videos": 500,
+   "completion_rate": 0.868,
+   "calls_per_finished_video": 8.09,
+   "duplicate_success_calls_per_video": 1.066,
+   "futile_calls_per_video": 0.45,
+   "mean_runs_per_finished_video": 1.005
+  },
+  {
+   "strategy": "FULL - shot isolation",
+   "fail": 0.1,
+   "videos": 500,
+   "completion_rate": 0.868,
+   "calls_per_finished_video": 6.339,
+   "duplicate_success_calls_per_video": 0.0,
+   "futile_calls_per_video": 0.424,
+   "mean_runs_per_finished_video": 1.005
+  },
+  {
+   "strategy": "S0 upstream (single run)",
+   "fail": 0.3,
+   "videos": 500,
+   "completion_rate": 0.168,
+   "calls_per_finished_video": 16.226,
+   "duplicate_success_calls_per_video": 0.0,
+   "futile_calls_per_video": 0.058,
+   "mean_runs_per_finished_video": 1.0
+  },
+  {
+   "strategy": "H1 upstream + whole-video rerun",
+   "fail": 0.3,
+   "videos": 500,
+   "completion_rate": 0.346,
+   "calls_per_finished_video": 18.786,
+   "duplicate_success_calls_per_video": 1.246,
+   "futile_calls_per_video": 0.432,
+   "mean_runs_per_finished_video": 1.699
+  },
+  {
+   "strategy": "H2 + uniform shot retry x3",
+   "fail": 0.3,
+   "videos": 500,
+   "completion_rate": 0.668,
+   "calls_per_finished_video": 15.65,
+   "duplicate_success_calls_per_video": 0.99,
+   "futile_calls_per_video": 3.58,
+   "mean_runs_per_finished_video": 1.021
+  },
+  {
+   "strategy": "FULL",
+   "fail": 0.3,
+   "videos": 500,
+   "completion_rate": 0.824,
+   "calls_per_finished_video": 9.126,
+   "duplicate_success_calls_per_video": 0.0,
+   "futile_calls_per_video": 0.67,
+   "mean_runs_per_finished_video": 1.097
+  },
+  {
+   "strategy": "FULL - error classes (uniform x3)",
+   "fail": 0.3,
+   "videos": 500,
+   "completion_rate": 0.888,
+   "calls_per_finished_video": 9.385,
+   "duplicate_success_calls_per_video": 0.0,
+   "futile_calls_per_video": 1.306,
+   "mean_runs_per_finished_video": 1.043
+  },
+  {
+   "strategy": "FULL - prompt rewrite",
+   "fail": 0.3,
+   "videos": 500,
+   "completion_rate": 0.672,
+   "calls_per_finished_video": 12.173,
+   "duplicate_success_calls_per_video": 0.0,
+   "futile_calls_per_video": 1.672,
+   "mean_runs_per_finished_video": 1.036
+  },
+  {
+   "strategy": "FULL - checkpoint/resume",
+   "fail": 0.3,
+   "videos": 500,
+   "completion_rate": 0.81,
+   "calls_per_finished_video": 12.454,
+   "duplicate_success_calls_per_video": 1.678,
+   "futile_calls_per_video": 0.852,
+   "mean_runs_per_finished_video": 1.081
+  },
+  {
+   "strategy": "FULL - shot isolation",
+   "fail": 0.3,
+   "videos": 500,
+   "completion_rate": 0.812,
+   "calls_per_finished_video": 8.522,
+   "duplicate_success_calls_per_video": 0.0,
+   "futile_calls_per_video": 0.67,
+   "mean_runs_per_finished_video": 1.084
+  }
+ ],
+ "comparisons": [
+  {
+   "a": "FULL",
+   "b": "H1 upstream + whole-video rerun",
+   "fail": 0.1,
+   "a_only": 48,
+   "b_only": 0,
+   "p": 7.105427357601002e-15
+  },
+  {
+   "a": "FULL",
+   "b": "H2 + uniform shot retry x3",
+   "fail": 0.1,
+   "a_only": 25,
+   "b_only": 0,
+   "p": 5.960464477539063e-08
+  },
+  {
+   "a": "FULL",
+   "b": "H1 upstream + whole-video rerun",
+   "fail": 0.3,
+   "a_only": 240,
+   "b_only": 1,
+   "p": 1.3696714606725402e-70
+  },
+  {
+   "a": "FULL",
+   "b": "H2 + uniform shot retry x3",
+   "fail": 0.3,
+   "a_only": 78,
+   "b_only": 0,
+   "p": 6.617444900424222e-24
+  }
+ ]
+}

@@ -49,11 +49,16 @@ class CorruptOutputError(InjectedFault):
     """Provider returned output that cannot be used (empty / undecodable file)."""
 
 
+class BadInputError(InjectedFault):
+    """Invalid shot parameters. Deterministic: every retry of the same shot fails."""
+
+
 FAULT_KINDS: Dict[str, Type[InjectedFault]] = {
     "timeout": ProviderTimeoutError,
     "rate_limit": RateLimitedError,
     "moderation": ModerationRejectedError,
     "corrupt": CorruptOutputError,
+    "bad_input": BadInputError,
 }
 
 
@@ -82,11 +87,14 @@ class FaultProfile:
         }
     )
     seed: int = 0
+    # Content-dependent faults (state is keyed by shot content, so it survives reruns):
+    rewrite_fix_rate: float = 0.7  # P(a rewritten prompt passes moderation)
+    bad_input_rate: float = 0.0  # P(a shot has invalid parameters; fails forever)
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.failure_rate <= 1.0:
             raise ValueError("failure_rate must be within [0, 1]")
-        unknown = set(self.mix) - set(FAULT_KINDS)
+        unknown = set(self.mix) - (set(FAULT_KINDS) - {"bad_input"})
         if unknown:
             raise ValueError(f"unknown fault kinds: {sorted(unknown)}")
         total = sum(self.mix.values())
@@ -116,6 +124,7 @@ class ShotCall:
     attempt: int
     outcome: str  # "ok" or a fault kind
     task_id: Optional[str] = None
+    futile: bool = False  # failure fully determined by shot content (retrying unchanged cannot help)
 
 
 class FakeFrameProcessor:
@@ -144,6 +153,8 @@ class FakeFrameProcessor:
         self.on_call = on_call
         self.ledger: List[ShotCall] = []
         self._attempts: Dict[tuple, int] = {}
+        self._bad_input: Dict[str, bool] = {}
+        self._moderated: Dict[tuple, bool] = {}  # (content, prompt_version) -> rejected?
 
     # Signature mirrors pixelle_video.services.frame_processor.FrameProcessor.__call__
     async def __call__(
@@ -163,9 +174,9 @@ class FakeFrameProcessor:
         if self.on_call is not None:
             self.on_call(frame.index, attempt)
 
-        kind = self._decide(frame.index, attempt)
+        kind, futile = self._decide(frame, attempt)
         self.ledger.append(
-            ShotCall(frame_index=frame.index, attempt=attempt, outcome=kind or "ok", task_id=task_id)
+            ShotCall(frame.index, attempt, kind or "ok", task_id=task_id, futile=futile)
         )
         if kind is not None:
             raise FAULT_KINDS[kind](f"injected {kind} on frame {frame.index} (attempt {attempt})")
@@ -180,11 +191,33 @@ class FakeFrameProcessor:
 
     # ------------------------------------------------------------------ #
 
-    def _decide(self, frame_index: int, attempt: int) -> Optional[str]:
-        scheduled = self.fail_on.get(frame_index)
+    def _decide(self, frame, attempt: int) -> tuple[Optional[str], bool]:
+        """Return (fault kind or None, futile)."""
+        scheduled = self.fail_on.get(frame.index)
         if scheduled is not None and attempt <= len(scheduled):
-            return scheduled[attempt - 1]
-        return self.profile.draw()
+            return scheduled[attempt - 1], False
+
+        rng = self.profile._rng
+        content = getattr(frame, "narration", None) or str(frame.index)
+        if content not in self._bad_input:
+            self._bad_input[content] = rng.random() < self.profile.bad_input_rate
+        if self._bad_input[content]:
+            return "bad_input", True
+
+        version = getattr(frame, "prompt_rewrites", 0)
+        key = (content, version)
+        if self._moderated.get(key):
+            return "moderation", True  # same prompt version again: rejected again
+        if key not in self._moderated and any(c == content for c, _ in self._moderated):
+            rejected = rng.random() >= self.profile.rewrite_fix_rate  # newly rewritten prompt
+            self._moderated[key] = rejected
+            if rejected:
+                return "moderation", False
+
+        kind = self.profile.draw()
+        if kind == "moderation":
+            self._moderated[key] = True
+        return kind, False
 
     @staticmethod
     def _segment_path(task_id: Optional[str], frame_index: int) -> Path:
@@ -205,6 +238,9 @@ class FakeFrameProcessor:
 
     def successful_frames(self) -> List[int]:
         return sorted({c.frame_index for c in self.ledger if c.outcome == "ok"})
+
+    def futile_calls(self) -> int:
+        return sum(1 for c in self.ledger if c.futile)
 
     def duplicate_successes(self) -> int:
         """Number of successful calls beyond the first for each frame (wasted spend)."""

@@ -65,3 +65,20 @@ def make_pipeline(workdir, stub_concat):
         return StandardPipeline(core), persistence
 
     return _make
+
+
+@pytest.fixture
+def make_reliable(workdir, stub_concat):
+    """Factory: ReliablePipeline wired to a FakeFrameProcessor, no real sleeping."""
+    from pixelle_video.reliability import ReliablePipeline
+
+    async def _no_sleep(_):
+        return None
+
+    def _make(processor: FakeFrameProcessor, **kwargs):
+        persistence = PersistenceService(output_dir=str(workdir / "output"))
+        core = FakeCore(frame_processor=processor, persistence=persistence)
+        kwargs.setdefault("sleep", _no_sleep)
+        return ReliablePipeline(core, **kwargs), persistence
+
+    return _make

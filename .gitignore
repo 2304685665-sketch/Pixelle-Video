@@ -78,3 +78,5 @@ repositories/
 # editing: local model weights and index runs
 models/
 runs/
+# keep real test suites under tests/ (upstream ignores test_*.py scratch files)
+!tests/**/test_*.py
