@@ -11,16 +11,20 @@
 - 索引参数（在开发集上确定后固定）：threshold = ___，min_len = ___，max_len = ___，keyframes = ___，cut_method = ___
 - 编码器：Chinese-CLIP ViT-B/16（`OFA-Sys/chinese-clip-vit-base-patch16`）
 
+- VLM 模型（画面描述 / 素材描述）：
+- LLM 模型（llm-asset 对照组）：
+
 ## 假设
 
-H1：在留出集上，镜头级视觉检索（`visual`）的 Hit@1 高于整文件分配（`asset-visual`）。两者使用相同的视觉证据，唯一差别是返回粒度。
+- **H1（主假设）：** 在留出集上，镜头级混合检索（`visual+bm25-caption`）的 Hit@1 高于原版的 LLM 整文件分配（`llm-asset`）。
+- **H2（粒度）：** `visual` 的 Hit@1 高于 `asset-visual`。两者视觉证据相同，唯一差别是返回粒度。
 
 ## 主要指标与检验
 
 - 主要指标：留出集 Hit@1
-- 检验方法：精确 McNemar（双侧），比较 `visual` 和 `asset-visual` 的逐条 Hit@1
-- 显著性阈值：α = 0.05
-- 次要指标（只做描述，不做检验）：Hit@3、MRR、文件命中率、`asset-filename` 的结果
+- 检验方法：精确 McNemar（双侧），H1 和 H2 各做一次
+- 显著性阈值：α = 0.05；两个假设用 Holm 校正
+- 次要指标（只做描述，不做检验）：Hit@3、MRR、文件命中率、`llm-asset` 编造路径数、`asset-filename` 的结果
 
 ## 预期
 

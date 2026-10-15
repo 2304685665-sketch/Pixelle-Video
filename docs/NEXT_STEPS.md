@@ -70,14 +70,22 @@ uv run pytest -q          # 应该全部通过（Mac 上若没启动 redis，ser
    - 留出集写完后立刻 `git commit`，再运行 `shasum -a 256 benchmarks/labels/footage_holdout.jsonl`，把哈希值填进预注册文档。之后不能再改。
 5. **填写预注册** `docs/preregistration_retrieval_v1.md`，然后提交。
 6. **在开发集上调参并做失败审计**（见第 3 步），可以调切分阈值、`--max-len`、关键帧数量、融合权重。
-7. **最后在留出集上只跑一次：**
+7. **生成画面描述和素材描述**（调用 DashScope 视觉模型，会产生费用；结果有缓存，重跑不会重复付费）。模型名用 WebUI「素材分析」里选的那个：
+   ```bash
+   uv run python benchmarks/retrieval_eval.py caption --index runs/footage_idx --vlm-model <VLM 模型名>
+   uv run python benchmarks/retrieval_eval.py describe-assets --index runs/footage_idx --vlm-model <VLM 模型名>
+   ```
+   `caption` 给每个片段写一句画面描述，供 `bm25-caption` 通道使用；`describe-assets` 给每个素材文件写整体描述，这正是原版交给 LLM 的输入。
+8. **最后在留出集上只跑一次：**
    ```bash
    uv run python benchmarks/retrieval_eval.py eval --index runs/footage_idx \
      --labels benchmarks/labels/footage_holdout.jsonl --model-dir models/chinese-clip-vit-base-patch16 \
-     --methods asset-filename asset-visual visual --baseline asset-visual \
+     --methods llm-asset asset-visual visual visual+bm25-caption --baseline llm-asset \
      --out benchmarks/results/retrieval_holdout_v1.json
    ```
-   主对比是 `visual` 对 `asset-visual`：两者用完全相同的视觉证据，唯一差别是粒度。
+   - **主对比：** `visual+bm25-caption`（镜头级混合检索）对 `llm-asset`（原版做法：LLM 根据素材描述分配整个文件）。
+   - **粒度对比：** `visual` 对 `asset-visual`。两者视觉证据完全相同，唯一差别是返回粒度，用来单独度量“整文件分配”带来的损失。
+   - `llm-asset` 的 LLM 回答会缓存在索引目录里；同时会统计 LLM 编造了多少个不存在的路径（`invalid_paths`），可以写进结果。
 
 ---
 
@@ -97,8 +105,6 @@ uv run pytest -q          # 应该全部通过（Mac 上若没启动 redis，ser
 
 ## 第 4 步 · 之后可以继续加的（需要再写代码）
 
-- **画面描述通道：** 用 VLM 给每个片段生成一句画面描述，写进索引的 `caption` 字段，再用 `visual+bm25-caption` 融合检索。用来解决“家似乎不再是我想象的模样”这类抽象旁白。原作者的 `services/api_services/vlm_client.py` 可以直接调用。
 - **内容安全预检：** 生成前用规则加 LLM 两层判别。构造约 100 条会触发审核的 prompt 和约 200 条正常 prompt，报告真实 API 拒绝率的下降和合法 prompt 的误拦率。
-- **真实的 LLM 分配对照组：** 复现原作者 `AssetBasedPipeline` 的 LLM 直接分配，作为检索实验的第 4 个对照组。
 
 这三项可以之后再开 Claude Code 让它照着这份文档继续做。

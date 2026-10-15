@@ -9,7 +9,6 @@ import pytest
 from pixelle_video.reliability import ShotsIncompleteError
 from pixelle_video.reliability.fingerprint import shot_fingerprint, template_uses_index
 from pixelle_video.testing import FakeFrameProcessor
-
 from tests.conftest import PIPELINE_KWARGS, SCRIPT_5_SHOTS
 
 LINES = [f"Shot {i} narration." for i in range(5)]

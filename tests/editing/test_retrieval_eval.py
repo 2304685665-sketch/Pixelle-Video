@@ -195,3 +195,30 @@ def test_cli_eval_end_to_end(fake_index, tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["retrieval_eval.py", "sheet", "--index", str(out)])
     retrieval_eval.main()
     assert (out / "contact_sheet.html").read_text().count("<tr>") == 9
+
+
+def test_cli_caption_describe_and_llm_baseline(fake_index, tmp_path, monkeypatch):
+    import shutil
+    import sys
+
+    from benchmarks import retrieval_eval
+
+    _, out = fake_index
+    idx_dir = tmp_path / "idx"
+    shutil.copytree(out, idx_dir)
+    labels = tmp_path / "labels.jsonl"
+    labels.write_text("\n".join(json.dumps(d, ensure_ascii=False) for d in LABELS), encoding="utf-8")
+    for argv in (["caption", "--index", str(idx_dir), "--fake"],
+                 ["describe-assets", "--index", str(idx_dir), "--fake"]):
+        monkeypatch.setattr(sys, "argv", ["retrieval_eval.py", *argv])
+        retrieval_eval.main()
+    assert (idx_dir / "asset_descriptions.json").exists()
+    result = tmp_path / "res.json"
+    monkeypatch.setattr(sys, "argv", [
+        "retrieval_eval.py", "eval", "--index", str(idx_dir), "--labels", str(labels), "--fake",
+        "--methods", "llm-asset", "visual", "bm25-caption", "visual+bm25-caption",
+        "--baseline", "llm-asset", "--out", str(result)])
+    retrieval_eval.main()
+    data = json.loads(result.read_text())
+    assert set(data["reports"]) == {"llm-asset", "visual", "bm25-caption", "visual+bm25-caption"}
+    assert data["reports"]["visual+bm25-caption"]["hit_at"]["1"] >= data["reports"]["llm-asset"]["hit_at"]["1"]

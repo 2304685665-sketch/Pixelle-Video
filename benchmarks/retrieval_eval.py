@@ -15,7 +15,8 @@ Footage retrieval benchmark CLI.
         --methods asset-filename asset-visual visual \
         --baseline asset-filename --out benchmarks/results/retrieval_v1.json
 
-Method specs: ``asset-filename``, ``asset-visual`` (upstream granularity
+Method specs: ``llm-asset`` (upstream-faithful LLM assignment; run
+``describe-assets`` first), ``asset-filename``, ``asset-visual`` (file-level
 baselines), or segment-level channel combinations joined by ``+``:
 ``visual``, ``visual-mean``, ``bm25-<field>`` (e.g. ``visual+bm25-caption``).
 Use ``--fake`` instead of ``--model-dir`` for the colour test encoder.
@@ -60,7 +61,22 @@ def make_encoder(args):
     return ChineseClipEncoder(args.model_dir)
 
 
-def build_method(spec: str, index: SegmentIndex, encoder):
+def build_method(spec: str, index: SegmentIndex, encoder, args=None):
+    if spec == "llm-asset":
+        from pixelle_video.editing.describe import LLMAssetBaseline, upstream_llm
+
+        desc_file = Path(args.index) / "asset_descriptions.json"
+        if not desc_file.exists():
+            sys.exit("llm-asset needs asset descriptions: run the 'describe-assets' command first")
+        if args.fake:
+            from pixelle_video.testing.fake_encoders import FakeAssignLLM
+
+            descriptions = json.loads(desc_file.read_text(encoding="utf-8"))
+            llm, name = FakeAssignLLM(descriptions), "fake"
+        else:
+            descriptions = json.loads(desc_file.read_text(encoding="utf-8"))
+            llm, name = upstream_llm(args.llm_model), f"upstream:{args.llm_model or 'config'}"
+        return LLMAssetBaseline(index, descriptions, llm, Path(args.index) / "llm_asset_cache.json", llm_name=name)
     if spec == "asset-filename":
         return AssetLevelBaseline(index, "filename")
     if spec == "asset-visual":
@@ -125,7 +141,7 @@ def cmd_eval(args) -> None:
     reports = {}
     for spec in args.methods:
         reports[spec] = evaluate_method(
-            build_method(spec, idx, encoder), labels, iou_threshold=args.iou, min_cover=args.min_cover
+            build_method(spec, idx, encoder, args), labels, iou_threshold=args.iou, min_cover=args.min_cover
         )
 
     print(f"protocol {PROTOCOL_VERSION} · {len(labels)} queries · iou>={args.iou} · cover>={args.min_cover}")
@@ -173,6 +189,40 @@ def cmd_eval(args) -> None:
         print(f"saved {out}")
 
 
+def _describer(args):
+    if args.fake:
+        from pixelle_video.testing.fake_encoders import FakeDescriber
+
+        return FakeDescriber()
+    if not args.vlm_model:
+        sys.exit("need --vlm-model (a DashScope VLM model name, e.g. the one used in the WebUI) or --fake")
+    from pixelle_video.editing.describe import UpstreamDescriber
+
+    return UpstreamDescriber(args.vlm_model)
+
+
+def cmd_caption(args) -> None:
+    import asyncio
+
+    from pixelle_video.editing.describe import caption_segments
+
+    idx = SegmentIndex.load(args.index)
+    stats = asyncio.run(caption_segments(idx, args.index, _describer(args), concurrency=args.concurrency))
+    print(f"captions: {stats} -> texts['caption'] in {args.index}")
+
+
+def cmd_describe_assets(args) -> None:
+    import asyncio
+
+    from pixelle_video.editing.describe import describe_assets
+
+    idx = SegmentIndex.load(args.index)
+    desc = asyncio.run(describe_assets(idx, args.index, _describer(args), concurrency=args.concurrency))
+    out = Path(args.index) / "asset_descriptions.json"
+    out.write_text(json.dumps(desc, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"described {len(desc)}/{len(idx.assets())} assets -> {out}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -196,6 +246,15 @@ def main() -> None:
     p.add_argument("--index", required=True)
     p.set_defaults(func=cmd_sheet)
 
+    for name, fn, help_ in (("caption", cmd_caption, "VLM caption per segment -> bm25-caption channel"),
+                            ("describe-assets", cmd_describe_assets, "VLM description per asset -> llm-asset")):
+        p = sub.add_parser(name, help=help_)
+        p.add_argument("--index", required=True)
+        p.add_argument("--vlm-model", default=None)
+        p.add_argument("--concurrency", type=int, default=4)
+        p.add_argument("--fake", action="store_true")
+        p.set_defaults(func=fn)
+
     p = sub.add_parser("eval")
     p.add_argument("--index", required=True)
     p.add_argument("--labels", required=True)
@@ -203,6 +262,7 @@ def main() -> None:
     p.add_argument("--baseline", default="asset-filename")
     p.add_argument("--iou", type=float, default=0.3)
     p.add_argument("--min-cover", type=float, default=0.5)
+    p.add_argument("--llm-model", default=None, help="override the LLM model for llm-asset (default: config.yaml)")
     p.add_argument("--out", default=None)
     add_encoder_args(p)
     p.set_defaults(func=cmd_eval)
