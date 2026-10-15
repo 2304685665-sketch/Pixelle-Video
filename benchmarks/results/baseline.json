@@ -1,0 +1,89 @@
+{
+  "args": {
+    "videos": 200,
+    "shots": 5,
+    "rates": [
+      0.0,
+      0.05,
+      0.1,
+      0.3
+    ],
+    "whole_retries": 3,
+    "seed": 42,
+    "out": "benchmarks/results/baseline.json"
+  },
+  "rows": [
+    {
+      "strategy": "single",
+      "failure_rate": 0.0,
+      "videos": 200,
+      "shots_per_video": 5,
+      "completion_rate": 1.0,
+      "calls_per_finished_video": 5.0,
+      "wasted_calls_per_video": 0
+    },
+    {
+      "strategy": "single",
+      "failure_rate": 0.05,
+      "videos": 200,
+      "shots_per_video": 5,
+      "completion_rate": 0.81,
+      "calls_per_finished_video": 5.63,
+      "wasted_calls_per_video": 0
+    },
+    {
+      "strategy": "single",
+      "failure_rate": 0.1,
+      "videos": 200,
+      "shots_per_video": 5,
+      "completion_rate": 0.625,
+      "calls_per_finished_video": 6.632,
+      "wasted_calls_per_video": 0
+    },
+    {
+      "strategy": "single",
+      "failure_rate": 0.3,
+      "videos": 200,
+      "shots_per_video": 5,
+      "completion_rate": 0.165,
+      "calls_per_finished_video": 16.667,
+      "wasted_calls_per_video": 0
+    },
+    {
+      "strategy": "whole_retry",
+      "failure_rate": 0.0,
+      "videos": 200,
+      "shots_per_video": 5,
+      "completion_rate": 1.0,
+      "calls_per_finished_video": 5.0,
+      "wasted_calls_per_video": 0
+    },
+    {
+      "strategy": "whole_retry",
+      "failure_rate": 0.05,
+      "videos": 200,
+      "shots_per_video": 5,
+      "completion_rate": 1.0,
+      "calls_per_finished_video": 5.76,
+      "wasted_calls_per_video": 0.495
+    },
+    {
+      "strategy": "whole_retry",
+      "failure_rate": 0.1,
+      "videos": 200,
+      "shots_per_video": 5,
+      "completion_rate": 0.98,
+      "calls_per_finished_video": 6.867,
+      "wasted_calls_per_video": 1.125
+    },
+    {
+      "strategy": "whole_retry",
+      "failure_rate": 0.3,
+      "videos": 200,
+      "shots_per_video": 5,
+      "completion_rate": 0.585,
+      "calls_per_finished_video": 14.111,
+      "wasted_calls_per_video": 1.825
+    }
+  ]
+}
