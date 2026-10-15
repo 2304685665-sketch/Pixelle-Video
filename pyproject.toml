@@ -39,6 +39,13 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "ruff>=0.6.0",
 ]
+editing = [
+    "jieba>=0.42.1",
+]
+editing-models = [
+    "torch>=2.3",
+    "transformers>=4.44",
+]
 
 [build-system]
 requires = ["hatchling"]

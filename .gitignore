@@ -74,3 +74,7 @@ examples/
 repositories/
 
 *.out
+
+# editing: local model weights and index runs
+models/
+runs/
