@@ -17,9 +17,7 @@ import pytest
 
 from pixelle_video.testing import FakeFrameProcessor
 from pixelle_video.testing import InjectedFault as _Fault
-
 from tests.conftest import PIPELINE_KWARGS, SCRIPT_5_SHOTS
-
 
 # --------------------------------------------------------------------------- #
 # Sanity

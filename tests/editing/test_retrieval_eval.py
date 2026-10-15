@@ -26,7 +26,6 @@ from pixelle_video.editing.retrieval import (
     tokenize,
 )
 from pixelle_video.testing.fake_encoders import FakeColourEncoder
-
 from tests.editing.conftest import LABELS
 
 # --------------------------------------------------------------------------- #

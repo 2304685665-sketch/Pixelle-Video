@@ -26,7 +26,6 @@ from pixelle_video.testing.fault_injection import (
     ProviderTimeoutError,
     RateLimitedError,
 )
-
 from tests.conftest import PIPELINE_KWARGS, SCRIPT_5_SHOTS
 
 
@@ -242,3 +241,20 @@ def test_checkpoint_store_roundtrip(tmp_path):
     assert store.load_plan("t1") == {"a": 1}
     store.save_plan("t1", "P", {"a": 1}, n_shots=3)  # idempotent: shot state preserved
     assert store.shots("t1")[0].status == "done"
+
+
+def test_measured_error_summary_feeds_simulator():
+    from benchmarks.measure_provider_errors import summarize
+
+    rows = (
+        [{"ok": True, "error_class": None, "error": None, "latency_s": 10.0}] * 6
+        + [{"ok": False, "error_class": "transient", "error": "HTTP 429 Too Many Requests", "latency_s": 1}]
+        + [{"ok": False, "error_class": "transient", "error": "ReadTimeout", "latency_s": 60}]
+        + [{"ok": False, "error_class": "content", "error": "DataInspectionFailed", "latency_s": 2}]
+        + [{"ok": False, "error_class": "input", "error": "ValueError", "latency_s": 0.1}]
+    )
+    s = summarize(rows)
+    assert (s["calls"], s["failures"], s["failure_rate"]) == (10, 4, 0.4)
+    assert s["measured_mix"] == {"timeout": 0.3333, "rate_limit": 0.3333, "moderation": 0.3333, "corrupt": 0.0}
+    assert s["bad_input_rate"] == 0.1
+    FaultProfile(mix={k: v for k, v in s["measured_mix"].items() if v > 0})  # accepted by the simulator

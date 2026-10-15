@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from pixelle_video.services.persistence import PersistenceService
 from pixelle_video.serving import (
     EventLog,
     IdempotencyConflict,
@@ -13,9 +14,7 @@ from pixelle_video.serving import (
     Worker,
     pixelle_runner,
 )
-from pixelle_video.services.persistence import PersistenceService
 from pixelle_video.testing import FakeCore, FakeFrameProcessor
-
 from tests.conftest import PIPELINE_KWARGS, SCRIPT_5_SHOTS
 
 REQ = {"text": SCRIPT_5_SHOTS, "params": {k: v for k, v in PIPELINE_KWARGS.items()}}

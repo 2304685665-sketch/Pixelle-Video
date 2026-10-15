@@ -117,7 +117,8 @@ def _script(v: int, shots: int) -> str:
 
 async def run_video(strategy: Strategy, v: int, shots: int, fail: float, args, tmp: Path) -> VideoOutcome:
     profile = FaultProfile(
-        failure_rate=fail, seed=v, rewrite_fix_rate=args.rewrite_fix, bad_input_rate=args.bad_input
+        failure_rate=fail, seed=v, rewrite_fix_rate=args.rewrite_fix, bad_input_rate=args.bad_input,
+        **({"mix": args.mix} if args.mix else {}),
     )
     processor = FakeFrameProcessor(profile=profile)
     core = FakeCore(processor, PersistenceService(output_dir=str(tmp / "output")))
@@ -234,9 +235,19 @@ def main() -> None:
     ap.add_argument("--rewrite-fix", type=float, default=0.7)
     ap.add_argument("--bad-input", type=float, default=0.02)
     ap.add_argument("--crash-trials", type=int, default=200)
+    ap.add_argument("--mix-file", default=None,
+                    help="summary JSON from measure_provider_errors.py; uses its measured_mix and bad_input_rate")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
     out = Path(args.out).resolve() if args.out else None
+    args.mix = None
+    if args.mix_file:
+        measured = json.loads(Path(args.mix_file).read_text())
+        if not measured.get("measured_mix"):
+            sys.exit("mix file has no failures; cannot derive a fault mix")
+        args.mix = {k: v for k, v in measured["measured_mix"].items() if v > 0}
+        args.bad_input = measured.get("bad_input_rate", args.bad_input)
+        print(f"using measured mix {args.mix}, bad_input_rate={args.bad_input}")
 
     logger.remove()
     logger.add(sys.stderr, level="CRITICAL")
@@ -271,8 +282,8 @@ def main() -> None:
         out.write_text(json.dumps({
             "crash_trials": crash,
             "args": {k: v for k, v in vars(args).items() if k != "out"},
-            "fault_mix": FaultProfile().mix,
-            "note": "simulated faults; replace fault_mix with measured provider distribution before citing",
+            "fault_mix": args.mix or FaultProfile().mix,
+            "fault_mix_source": args.mix_file or "placeholder (not measured)",
             "rows": [{"strategy": r.strategy, "fail": r.fail, **r.summary()} for r in rows],
             "comparisons": comparisons,
         }, indent=1))
