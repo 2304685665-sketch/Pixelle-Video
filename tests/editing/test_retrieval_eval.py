@@ -247,3 +247,21 @@ def test_chinese_clip_feature_path_without_torch():
     enc.dim = 5
     with pytest.raises(RuntimeError):
         enc._image_features({"pixel_values": None})
+
+
+def test_label_sheet_parser():
+    from benchmarks.labels_from_text import parse, parse_time
+
+    assert parse_time("1:05") == 65 and parse_time("12.5") == 12.5
+    durations = {"a.mp4": 60.0, "b.mp4": 10.0}
+    text = """# comment
+    我在窗边 | a.mp4 | 3 | 7
+    雪 | a.mp4 | 0:10 | 0:14 | b.mp4 | 1 | 4
+    坏行 | c.mp4 | 1 | 2
+    越界 | b.mp4 | 8 | 12
+    格式错
+    """
+    rows, errors = parse(text, durations)
+    assert [r["query"] for r in rows] == ["我在窗边", "雪"]
+    assert rows[1]["alts"] == [{"asset": "b.mp4", "start": 1.0, "end": 4.0}]
+    assert len(errors) == 3

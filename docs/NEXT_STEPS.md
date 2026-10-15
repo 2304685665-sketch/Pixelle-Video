@@ -65,7 +65,7 @@ uv run pytest -q          # 应该全部通过（Mac 上若没启动 redis，ser
    uv run python benchmarks/retrieval_eval.py sheet --index runs/footage_idx
    open runs/footage_idx/contact_sheet.html
    ```
-4. **写 100 条标注，先写完再看任何检索结果。** 格式见 `docs/editing/README.md`。
+4. **写 100 条标注，先写完再看任何检索结果。** 在 `benchmarks/labels/raw.txt` 里每行写 `旁白 | 文件名 | 开始秒 | 结束秒`，然后运行 `uv run python benchmarks/labels_from_text.py --text benchmarks/labels/raw.txt --index runs/footage_idx` 自动校验、拆分（60% 留出）并打印留出集哈希。
    - 拆成两个文件：`benchmarks/labels/footage_dev.jsonl`（40 条，用来调参）和 `benchmarks/labels/footage_holdout.jsonl`（60 条，冻结留出集）。
    - 留出集写完后立刻 `git commit`，再运行 `shasum -a 256 benchmarks/labels/footage_holdout.jsonl`，把哈希值填进预注册文档。之后不能再改。
 5. **填写预注册** `docs/preregistration_retrieval_v1.md`，然后提交。
