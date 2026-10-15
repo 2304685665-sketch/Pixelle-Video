@@ -152,6 +152,20 @@ def cmd_eval(args) -> None:
             f"{r.mrr:>6.3f} {r.asset_acc_at1:>8.3f}"
         )
 
+    if args.show_failures:
+        rep = reports.get(args.show_failures)
+        if rep is None:
+            sys.exit("--show-failures must be one of --methods")
+        gold = {lb.id: lb for lb in labels}
+        misses = [q for q in rep.per_query if q.first_hit_rank != 1]
+        print(f"\nfailures of {args.show_failures}: {len(misses)}/{rep.n} missed at rank 1")
+        for q in misses:
+            g = gold[q.id].gold[0]
+            t = q.top1 or {}
+            where = f"hit at rank {q.first_hit_rank}" if q.first_hit_rank else "no hit in top-5"
+            print(f"- [{q.id}] {gold[q.id].query}\n    gold: {g.asset} {g.start:.1f}-{g.end:.1f}s"
+                  f"\n    top1: {t.get('asset_path')} {t.get('start', 0):.1f}-{t.get('end', 0):.1f}s ({where})")
+
     comparisons = []
     if args.baseline:
         if args.baseline not in reports:
@@ -187,6 +201,14 @@ def cmd_eval(args) -> None:
             encoding="utf-8",
         )
         print(f"saved {out}")
+
+
+def cmd_search(args) -> None:
+    idx = SegmentIndex.load(args.index)
+    method = build_method(args.method, idx, make_encoder(args), args)
+    for rank, pred in enumerate(method.search(args.query, k=args.k), start=1):
+        span = f"{pred.start:6.1f}-{pred.end:5.1f}s"
+        print(f"{rank:>2}. {pred.asset_path:<28} {span}  score={pred.score:.4f}")
 
 
 def _describer(args):
@@ -255,6 +277,14 @@ def main() -> None:
         p.add_argument("--fake", action="store_true")
         p.set_defaults(func=fn)
 
+    p = sub.add_parser("search", help="top-k segments for one query (smoke test)")
+    p.add_argument("--index", required=True)
+    p.add_argument("--query", required=True)
+    p.add_argument("--method", default="visual")
+    p.add_argument("--k", type=int, default=5)
+    add_encoder_args(p)
+    p.set_defaults(func=cmd_search)
+
     p = sub.add_parser("eval")
     p.add_argument("--index", required=True)
     p.add_argument("--labels", required=True)
@@ -263,6 +293,8 @@ def main() -> None:
     p.add_argument("--iou", type=float, default=0.3)
     p.add_argument("--min-cover", type=float, default=0.5)
     p.add_argument("--llm-model", default=None, help="override the LLM model for llm-asset (default: config.yaml)")
+    p.add_argument("--show-failures", default=None, metavar="METHOD",
+                   help="list queries this method missed at rank 1, with gold span and its top-1")
     p.add_argument("--out", default=None)
     add_encoder_args(p)
     p.set_defaults(func=cmd_eval)

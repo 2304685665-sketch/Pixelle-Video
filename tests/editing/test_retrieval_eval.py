@@ -265,3 +265,32 @@ def test_label_sheet_parser():
     assert [r["query"] for r in rows] == ["我在窗边", "雪"]
     assert rows[1]["alts"] == [{"asset": "b.mp4", "start": 1.0, "end": 4.0}]
     assert len(errors) == 3
+
+
+def test_cli_search_pilot_and_failures(fake_index, tmp_path, monkeypatch, capsys):
+    import sys
+
+    from benchmarks import labels_from_text, retrieval_eval
+
+    _, out = fake_index
+    monkeypatch.setattr(sys, "argv", ["r", "search", "--index", str(out), "--query", "红色", "--fake", "--k", "2"])
+    retrieval_eval.main()
+    assert "clips/rgb.mp4" in capsys.readouterr().out.splitlines()[0]
+
+    raw = tmp_path / "raw.txt"
+    raw.write_text("红色的电话 | clips/rgb.mp4 | 0 | 3\n白色的走廊 | walk/white.mp4 | 0 | 14\n"
+                   "一片蓝色 | clips/rgb.mp4 | 9 | 12\n", encoding="utf-8")
+    argv = ["l", "--text", str(raw), "--index", str(out), "--pilot", "--out-dir", str(tmp_path)]
+    monkeypatch.setattr(sys, "argv", argv)
+    labels_from_text.main()
+    pilot = tmp_path / "footage_pilot_v1.jsonl"
+    assert len(pilot.read_text().splitlines()) == 3
+    with pytest.raises(SystemExit):          # frozen: refuses to overwrite
+        labels_from_text.main()
+
+    monkeypatch.setattr(sys, "argv", ["r", "eval", "--index", str(out), "--labels", str(pilot), "--fake",
+                                      "--methods", "asset-visual", "visual", "--baseline", "asset-visual",
+                                      "--show-failures", "visual"])
+    retrieval_eval.main()
+    text = capsys.readouterr().out
+    assert "failures of visual" in text and "一片蓝色" in text   # blue gold 9-12s is magenta: a miss

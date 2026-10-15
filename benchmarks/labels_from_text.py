@@ -77,6 +77,9 @@ def main() -> None:
     ap.add_argument("--holdout", type=float, default=0.6, help="fraction of rows in the frozen holdout set")
     ap.add_argument("--seed", type=int, default=20261016)
     ap.add_argument("--out-dir", default="benchmarks/labels")
+    ap.add_argument("--pilot", action="store_true",
+                    help="small pilot: every row goes to one frozen test file, no dev split, no tuning")
+    ap.add_argument("--name", default="footage_pilot_v1", help="output file stem in --pilot mode")
     args = ap.parse_args()
 
     idx = SegmentIndex.load(args.index)
@@ -92,11 +95,22 @@ def main() -> None:
     if dupes:
         sys.exit(f"duplicate narrations: {sorted(dupes)[:5]}")
 
+    out = Path(args.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    if args.pilot:
+        path = out / f"{args.name}.jsonl"
+        if path.exists():
+            sys.exit(f"{path} already exists: pilot labels are frozen. Use a new --name for a new version.")
+        lines = [json.dumps({"id": f"p{i:03d}", **r}, ensure_ascii=False) for i, r in enumerate(rows)]
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        files = sorted({r["asset"] for r in rows})
+        print(f"pilot labels: {len(rows)} -> {path}  (files covered: {len(files)}/{len(durations)})")
+        print(f"SHA-256: {hashlib.sha256(path.read_bytes()).hexdigest()}")
+        return
+
     random.Random(args.seed).shuffle(rows)
     n_hold = round(len(rows) * args.holdout)
     hold, dev = rows[:n_hold], rows[n_hold:]
-    out = Path(args.out_dir)
-    out.mkdir(parents=True, exist_ok=True)
     paths = {}
     for name, part in (("dev", dev), ("holdout", hold)):
         path = out / f"footage_{name}.jsonl"
